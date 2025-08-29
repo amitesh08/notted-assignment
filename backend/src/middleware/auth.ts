@@ -7,14 +7,14 @@ declare global {
   namespace Express {
     interface Request {
       user?: {
-        id: String;
-        email: String;
+        id: string;
+        email: string;
       };
     }
   }
 }
 
-export const authenticatinoToken = async (
+export const authenticationToken = async (
   req: Request,
   res: Response,
   next: NextFunction
