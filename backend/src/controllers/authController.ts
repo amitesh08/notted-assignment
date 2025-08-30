@@ -5,6 +5,7 @@ import prisma from "../config/database";
 import { AuthUtils } from "../utils/auth";
 import { OTPService } from "../services/otpServices";
 import { EmailService } from "../services/emailService";
+import { GoogleAuthService } from "../services/googleAuthService";
 
 export class AuthController {
   // Send OTP with complete signup data
@@ -239,6 +240,95 @@ export class AuthController {
       res.status(500).json({
         success: false,
         message: "Internal server error",
+      });
+    }
+  }
+
+  // Google OAuth
+  static async googleAuth(req: Request, res: Response) {
+    try {
+      const { idToken } = req.body;
+
+      if (!idToken) {
+        return res.status(400).json({
+          success: false,
+          message: "Google ID token is required",
+        });
+      }
+
+      // Verify Google token and get user data
+      let googleUser;
+      try {
+        googleUser = await GoogleAuthService.verifyGoogleToken(idToken);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid Google token",
+        });
+      }
+
+      if (!googleUser.verified) {
+        return res.status(400).json({
+          success: false,
+          message: "Google email not verified",
+        });
+      }
+
+      const sanitizedEmail = ValidationUtils.sanitizeEmail(googleUser.email);
+
+      // Check if user exists
+      let user = await prisma.user.findFirst({
+        where: {
+          OR: [{ email: sanitizedEmail }, { googleId: googleUser.googleId }],
+        },
+      });
+
+      if (user) {
+        // User exists - update Google ID if not set
+        if (!user.googleId) {
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              googleId: googleUser.googleId,
+              name: user.name || googleUser.name,
+            },
+          });
+        }
+      } else {
+        // Create new user with Google account
+        user = await prisma.user.create({
+          data: {
+            email: sanitizedEmail,
+            name: googleUser.name,
+            googleId: googleUser.googleId,
+            // No password for Google OAuth users
+          },
+        });
+      }
+
+      // Generate JWT token
+      const token = AuthUtils.generateToken({
+        userId: user.id,
+        email: user.email,
+      });
+
+      res.json({
+        success: true,
+        message: "Google authentication successful",
+        data: {
+          token,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Google auth error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Google authentication failed",
       });
     }
   }
