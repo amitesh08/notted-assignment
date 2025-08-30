@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import prisma from "./config/database";
 import authRoutes from "./routes/authRoutes";
+import notesRoutes from "./routes/notesRoutes";
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ app.use(express.json());
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/notes", notesRoutes);
 
 // Test database connection
 app.get("/api/health", async (req, res) => {
@@ -66,6 +68,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🔐 Auth endpoints: http://localhost:${PORT}/api/auth`);
+  console.log(`📝 Notes endpoints: http://localhost:${PORT}/api/notes`);
 });
 
 //shutdown
