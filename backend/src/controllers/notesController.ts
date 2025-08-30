@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../config/database";
 import { CreateNoteInput, UpdateNoteInput } from "../types/notes";
+import { ValidationUtils } from "../utils/validation";
 
 export class NotesController {
   //Get all user Notes
@@ -32,18 +33,13 @@ export class NotesController {
       const userId = req.user!.id;
       const { title, content }: CreateNoteInput = req.body;
 
-      //validate input
-      if (!title || !title.trim()) {
+      // Validate input
+      const validation = ValidationUtils.validateNote(title, content);
+      if (!validation.isValid) {
         return res.status(400).json({
           success: false,
-          message: "Title is Reqired",
-        });
-      }
-
-      if (!content || !content.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: "Content is Reqired",
+          message: "Validation failed",
+          errors: validation.errors,
         });
       }
 

@@ -55,4 +55,55 @@ export class ValidationUtils {
       errors,
     };
   }
+
+  //NOtE Validation
+  static validateNote(title: string, content: string) {
+    const errors: string[] = [];
+
+    if (!title || !title.trim()) {
+      errors.push("Title is required");
+    } else if (title.trim().length > 100) {
+      errors.push("Title must be less than 100 characters");
+    }
+
+    if (!content || !content.trim()) {
+      errors.push("Content is required");
+    } else if (content.trim().length > 10000) {
+      errors.push("Content must be less than 10,000 characters");
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+    };
+  }
+
+  static validateNoteUpdate(title?: string, content?: string) {
+    const errors: string[] = [];
+
+    if (title !== undefined) {
+      if (!title.trim()) {
+        errors.push("Title cannot be empty");
+      } else if (title.trim().length > 100) {
+        errors.push("Title must be less than 100 characters");
+      }
+    }
+
+    if (content !== undefined) {
+      if (!content.trim()) {
+        errors.push("Content cannot be empty");
+      } else if (content.trim().length > 10000) {
+        errors.push("Content must be less than 10,000 characters");
+      }
+    }
+
+    if (title === undefined && content === undefined) {
+      errors.push("At least title or content must be provided for update");
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+    };
+  }
 }
