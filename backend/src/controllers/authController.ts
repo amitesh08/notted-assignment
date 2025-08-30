@@ -3,16 +3,17 @@ import { CreateUserInput, LoginInput } from "../types";
 import { ValidationUtils } from "../utils/validation";
 import prisma from "../config/database";
 import { AuthUtils } from "../utils/auth";
+import { OTPService } from "../services/otpServices";
+import { EmailService } from "../services/emailService";
 
 export class AuthController {
-  //user Signup
-  static async signup(req: Request, res: Response) {
+  // Send OTP with complete signup data
+  static async sendSignupOTP(req: Request, res: Response) {
     try {
-      const { email, password, name }: CreateUserInput = req.body;
+      const { email, password, name } = req.body;
 
-      //validate Input
+      // Validate all signup data upfront
       const validation = ValidationUtils.validateSignup(email, password, name);
-
       if (!validation.isValid) {
         return res.status(400).json({
           success: false,
@@ -21,41 +22,107 @@ export class AuthController {
         });
       }
 
-      const sanitizeEmail = ValidationUtils.sanitizeEmail(email);
+      const sanitizedEmail = ValidationUtils.sanitizeEmail(email);
 
-      //check if user already exists
+      // Check if user already exists
       const existingUser = await prisma.user.findUnique({
-        where: { email: sanitizeEmail },
+        where: { email: sanitizedEmail },
       });
 
       if (existingUser) {
-        return res.status(400).json({
+        return res.status(409).json({
           success: false,
-          message: "User already exist with this email",
+          message: "User already exists with this email",
         });
       }
 
-      //hash Password
-      const hashedPassword = await AuthUtils.hashPassword(password);
+      // Generate OTP and store complete signup data
+      const otp = OTPService.generateAndStore(sanitizedEmail, password, name);
+      const emailSent = await EmailService.sendOTP(sanitizedEmail, otp);
 
-      //create user
+      if (!emailSent) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to send verification email",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Verification code sent to your email",
+        data: {
+          email: sanitizedEmail,
+          message:
+            "Please check your email and enter the 6-digit verification code",
+        },
+      });
+    } catch (error) {
+      console.error("Send signup OTP error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  // Verify OTP and complete signup (simplified)
+  static async verifyOTPAndSignup(req: Request, res: Response) {
+    try {
+      const { email, otp } = req.body;
+
+      if (!email || !otp) {
+        return res.status(400).json({
+          success: false,
+          message: "Email and OTP are required",
+        });
+      }
+
+      const sanitizedEmail = ValidationUtils.sanitizeEmail(email);
+
+      // Verify OTP and get stored signup data
+      const otpResult = OTPService.verifyAndGetSignupData(sanitizedEmail, otp);
+
+      if (!otpResult.isValid || !otpResult.signupData) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired verification code",
+        });
+      }
+
+      // Check if user was created in the meantime
+      const existingUser = await prisma.user.findUnique({
+        where: { email: sanitizedEmail },
+      });
+
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: "User already exists",
+        });
+      }
+
+      // Hash password and create user
+      const hashedPassword = await AuthUtils.hashPassword(
+        otpResult.signupData.password
+      );
+
       const user = await prisma.user.create({
         data: {
-          email: sanitizeEmail,
+          email: sanitizedEmail,
           password: hashedPassword,
-          name: name?.trim() || null,
+          name: otpResult.signupData.name?.trim() || null,
         },
       });
 
-      //Generate JWT token
-      const token = await AuthUtils.generateToken({
+      // Generate JWT token
+      const token = AuthUtils.generateToken({
         userId: user.id,
         email: user.email,
       });
 
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        message: "User Created Successfully",
+        message: "Account created successfully",
         data: {
           token,
           user: {
@@ -66,7 +133,7 @@ export class AuthController {
         },
       });
     } catch (error) {
-      console.error("Signup error:", error);
+      console.error("Verify OTP and signup error:", error);
       res.status(500).json({
         success: false,
         message: "Internal server error",
